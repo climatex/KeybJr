@@ -8,27 +8,30 @@ inline void InitializeKeyboard() __attribute__((always_inline));
 extern uint8_t usingXtKeyboard;
 
 /* ************************************ XT keyboard specific ************************************ */
-volatile uint8_t xtKeybClock = 0;
-volatile uint8_t xtKeybData = 0;
-volatile uint8_t xtKeybAvailable = 0;
-uint8_t xtKeybStartbitsCount = 1; // usually 1. Or 2 for [very] old XT keyboards
+volatile uint8_t  xtKeybClock = 0;
+volatile uint16_t xtKeybData = 0;
+volatile uint8_t  xtKeybAvailable = 0;
+uint8_t xtKeybStartbitsCount = 0; // Auto-detected. This is usually 1 or 2 for IBM XT keyboards
 
 void XtKeyboardClockISR()
 {   
   // Immediately read data bit from data pin!
   const uint8_t bit = (PIND >> 3) & 1;
      
-  // Only perform OR if bit is one; skip start bits. One, or two
-  if (bit && (xtKeybClock >= xtKeybStartbitsCount))
+  // Only perform OR if bit is one
+  if (bit)
   {
-    xtKeybData |= bit << (xtKeybClock - xtKeybStartbitsCount);
+    xtKeybData |= bit << xtKeybClock;
   }
   
   xtKeybClock++;
   
-  // Read finished? Store into buffer
-  if (xtKeybClock == 8 + xtKeybStartbitsCount)  
+  // Read finished?
+  if (xtKeybStartbitsCount && (xtKeybClock == 8 + xtKeybStartbitsCount))
   {
+    // Cancel out start bits
+    xtKeybData >>= xtKeybStartbitsCount;
+    
     // Ignore data if something nonstandard
     const uint8_t scanCodeNoMSB = xtKeybData & 0x7f;
     
@@ -174,21 +177,41 @@ void SetupAtToXtTable()
 
 // Inlined into setup()
 inline void InitializeKeyboard()
-{
-  // Clear stuff up
-  xtKeybClock = xtKeybData = xtKeybAvailable = atKeybLockKeys = 0;
-  
+{  
   // Using an XT keyboard?
   if (usingXtKeyboard)
   {
-    // If the data line is low, there might be 2 start bits...
-    if (!((PIND >> 3) & 1))
+    // some XT DIN5 keyboards require /RESET (pin 3) connected to PD7 (DIP ATmega pin 13)
+    _delay_ms(500); // power-up delay
+    PORTD ^= 0x80;
+    _delay_ms(500); // assert /RESET for half a second
+    PORTD ^= 0x80;
+    _delay_ms(100); // before soft reset
+    
+    // To determine the number of start bits required, perform a "soft" reset
+    // of the keyboard by setting clock to output, and holding it low for 20ms
+    DDRD |= 4;
+    PORTD &= 0xFB;
+    _delay_ms(20);
+    
+    // End of reset command: clock set as input again, data input pulled high 
+    // Give the keyboard some time to respond with a reset result
+    attachInterrupt(digitalPinToInterrupt(2), XtKeyboardClockISR, FALLING);
+    DDRD &= 0xFB;
+    PORTD |= 8;
+    _delay_ms(500); // half a sec shall be enough even for IBM XT
+    xtKeybStartbitsCount = 0xff; // skip the first clock assert (pseudo-startbit) during counting
+         
+    // Read keyboard data (reset shall return 0xAA) whilst canceling out the start bits.
+    // This loop won't return if the keyboard didn't return what it should have
+    while (xtKeybData != 0xAA)
     {
-      xtKeybStartbitsCount = 2;
+      xtKeybData >>= 1;
+      xtKeybStartbitsCount++;
     }
         
-    // Attach ISR to clock line
-    attachInterrupt(digitalPinToInterrupt(2), XtKeyboardClockISR, FALLING);
+    // All set - clear the returned byte
+    xtKeybData = xtKeybClock = 0;
   }
   
   // Using an AT keyboard.
@@ -250,27 +273,27 @@ uint8_t ReadKeyboard()
   }
 }
 
-// Disables all interrupts and pulls down the data line (XT) or clock (AT)
+// Disables all interrupts and pulls down the clock+data lines (XT) or clock only (AT)
 void DisableKeyboard()
 {
   // Clear interrupt flag - this disables the keybclock ISR too
   cli();
   
-  // Set appropriate line to output...
-  DDRD |= (usingXtKeyboard) ? 8 : 4;
+  // Set appropriate outputs...
+  DDRD |= (usingXtKeyboard) ? 0x0C : 4;
   
-  // and pull it down
-  PORTD &= (usingXtKeyboard) ? 0xF7 : 0xFB;
+  // and pull down
+  PORTD &= (usingXtKeyboard) ? 0xF3 : 0xFB;
 }
 
 // The reverse of DisableKeyboard() + with AT/PS2: drop the hung character from buffer
 void EnableKeyboard()
 {
-  // Pullup
+  // Pullup data (XT) or clock (AT)
   PORTD |= (usingXtKeyboard) ? 8 : 4;
   
-  // Set appropriate line to input...
-  DDRD &= (usingXtKeyboard) ? 0xF7 : 0xFB;
+  // Set appropriate inputs again
+  DDRD &= (usingXtKeyboard) ? 0xF3 : 0xFB;
     
   // Set interrupt flag and re-enable all interrupt handlers
   sei();

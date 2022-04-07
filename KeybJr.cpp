@@ -1,9 +1,10 @@
 /* Pin assignments as follows:
-   PD2 (ATmega328 pin 4)  - Keyboard clock input
-   PD3 (   -||-   pin 5)  - Keyboard data input
-   PD4 (   -||-   pin 6)  - Keyboard select (AT/XT) input
-   PD5 (   -||-   pin 11) - PCjr infrared output
-   PD6 (   -||-   pin 12) - PCjr cable output
+   PD2 (DIP ATmega328 pin 4)  - Keyboard clock input
+   PD3 (    -||-      pin 5)  - Keyboard data input
+   PD4 (    -||-      pin 6)  - Keyboard select (AT/XT) input
+   PD5 (    -||-      pin 11) - PCjr infrared output
+   PD6 (    -||-      pin 12) - PCjr cable output
+   PD7 (    -||-      pin 13) - optional XT /RESET line handling
  */
 
 #include <Arduino.h>
@@ -15,12 +16,12 @@
 uint8_t usingXtKeyboard = 0;
 
 void setup()
-{ 
-  // Normal behavior: PD5 + PD6 outputs, PD4 + PD3 + PD2 as inputs
+{  
+  // Normal behavior: PD5 + PD6 + PD7 outputs, PD4 + PD3 + PD2 as inputs
   DDRD = 0xe2;
   
-  // By default, keybselect, keybclock and Jr cable output pulled up...
-  PORTD |= 0x54;
+  // By default, /RESET, keybselect, keybclock and Jr cable output pulled up...
+  PORTD |= 0xD4;
   // .. and the infrared pulled down
   PORTD &= 0xDF;
   
