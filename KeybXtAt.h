@@ -223,6 +223,7 @@ inline void InitializeKeyboard()
     
     // Do a soft reset on Arduino reset button...
     atKeyboard.resetKey();
+    atKeyboard.setLock(0);
   }
 }
 

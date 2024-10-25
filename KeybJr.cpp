@@ -24,6 +24,7 @@ void setup()
   PORTD |= 0xD4;
   // .. and the infrared pulled down
   PORTD &= 0xDF;
+  _delay_ms(10);
   
   // If using XT keyboard - PD4 jumpered to GND
   usingXtKeyboard = !((PIND >> 4) & 1);
@@ -38,8 +39,11 @@ void loop()
   // Then convert it for PCjr finesse and transmit through infrared and cable.
   // During TX, the keyboard waits.
   
-  const uint8_t scanCode = ReadKeyboard();
-  DisableKeyboard();
-  SendScancode(scanCode);
-  EnableKeyboard();
+  while(1)
+  {
+    const uint8_t scanCode = ReadKeyboard();
+    DisableKeyboard();
+    SendScancode(scanCode);
+    EnableKeyboard(); 
+  }
 }
