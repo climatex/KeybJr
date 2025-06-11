@@ -218,12 +218,34 @@ inline void InitializeKeyboard()
   // Use the PS2Keyboard class, translate scancode into XT
   else
   {
-    SetupAtToXtTable();    
-    atKeyboard.begin(3, 2);
+    SetupAtToXtTable();
     
-    // Do a soft reset on Arduino reset button...
-    atKeyboard.resetKey();
-    atKeyboard.setLock(0);
+    // Initialize keyboard and check for a response for up to 5 attempts.
+    uint8_t attempts = 5;
+    while (attempts)
+    {
+      // re-initialize
+      pinMode(2, OUTPUT);
+      digitalWrite(2, HIGH);    
+      delay(10);
+      
+      atKeyboard.begin(3, 2);
+      atKeyboard.resetKey(); // send 0xFF
+      
+      const uint32_t timeBefore = millis();
+      while (millis() - timeBefore < 100)
+      {
+        if (atKeyboard.read())
+        {
+          // got a response
+          atKeyboard.setLock(0);
+          return;
+        }
+      }
+          
+      detachInterrupt(digitalPinToInterrupt(2));
+      attempts--;
+    }
   }
 }
 
